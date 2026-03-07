@@ -132,7 +132,7 @@ function ConnectionLines() {
   );
 }
 
-export default function OnyxProductPage({ onOpenRadar }) {
+export default function OnyxProductPage() {
   const [activeModule, setActiveModule] = useState(null);
   const [scrollY, setScrollY] = useState(0);
 
@@ -257,7 +257,7 @@ export default function OnyxProductPage({ onOpenRadar }) {
           }}>
             Démarrer gratuitement
           </button>
-          <button onClick={onOpenRadar} style={{
+          <button style={{
             padding: "16px 40px",
             borderRadius: 12,
             border: "1px solid #ffffff22",
@@ -704,7 +704,7 @@ export default function OnyxProductPage({ onOpenRadar }) {
           }}>
             Rejoignez les organisations qui ne manquent plus rien. Commencez avec ONYX Radar — c'est gratuit.
           </p>
-          <button onClick={onOpenRadar} style={{
+          <button style={{
             padding: "18px 48px",
             borderRadius: 12,
             border: "none",
