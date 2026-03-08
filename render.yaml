@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: onyx-web
-    runtime: node
-    plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm run start
-    autoDeploy: true
-    healthCheckPath: /api/health
