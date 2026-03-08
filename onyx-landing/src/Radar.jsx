@@ -1,557 +1,493 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CATEGORIES = [
   { id: "all", label: "TOUT", color: "#00f0ff" },
   { id: "politique", label: "POLITIQUE", color: "#ff003c" },
-  { id: "reglementaire", label: "RÉGLEMENTAIRE", color: "#b026ff" },
+  { id: "reglementaire", label: "REGLEMENTAIRE", color: "#b026ff" },
   { id: "concurrence", label: "CONCURRENCE", color: "#ffb800" },
   { id: "sentiment", label: "SENTIMENT", color: "#00ff87" },
   { id: "tech", label: "TECHNOLOGIE", color: "#0080ff" },
 ];
 
-const MOCK_SOURCES = [
-  { id: 1, name: "Le Monde", url: "lemonde.fr", status: "active", category: "politique", lastScan: "il y a 3 min", articles: 847, trend: "+12%" },
-  { id: 2, name: "EUR-Lex", url: "eur-lex.europa.eu", status: "active", category: "reglementaire", lastScan: "il y a 8 min", articles: 234, trend: "+5%" },
-  { id: 3, name: "TechCrunch", url: "techcrunch.com", status: "active", category: "tech", lastScan: "il y a 1 min", articles: 1203, trend: "+23%" },
-  { id: 4, name: "Reuters", url: "reuters.com", status: "active", category: "concurrence", lastScan: "il y a 5 min", articles: 2104, trend: "+8%" },
-  { id: 5, name: "Twitter/X Trends", url: "x.com", status: "scanning", category: "sentiment", lastScan: "en cours...", articles: 15420, trend: "+45%" },
-  { id: 6, name: "Journal Officiel", url: "legifrance.gouv.fr", status: "active", category: "reglementaire", lastScan: "il y a 15 min", articles: 156, trend: "+2%" },
-  { id: 7, name: "Bloomberg", url: "bloomberg.com", status: "error", category: "concurrence", lastScan: "échec", articles: 0, trend: "—" },
-  { id: 8, name: "Assemblée Nationale", url: "assemblee-nationale.fr", status: "active", category: "politique", lastScan: "il y a 22 min", articles: 89, trend: "+1%" },
-];
+const STATUS_COLORS = {
+  active: "#00ff87",
+  error: "#ff003c",
+  scanning: "#00f0ff",
+};
 
-const MOCK_FEED = [
-  { id: 1, source: "Le Monde", title: "Nouvelle directive européenne sur l'IA adoptée en commission", category: "reglementaire", time: "14:32", sentiment: "neutre", priority: "haute" },
-  { id: 2, source: "Reuters", title: "Concurrent X annonce une levée de fonds de 200M€", category: "concurrence", time: "14:28", sentiment: "négatif", priority: "critique" },
-  { id: 3, source: "TechCrunch", title: "Les tendances SaaS B2B pour 2026 : l'IA au centre", category: "tech", time: "14:15", sentiment: "positif", priority: "moyenne" },
-  { id: 4, source: "Twitter/X", title: "Pic de mentions négatives détecté sur votre marque", category: "sentiment", time: "14:10", sentiment: "négatif", priority: "critique" },
-  { id: 5, source: "Journal Officiel", title: "Décret n°2026-234 relatif à la protection des données", category: "reglementaire", time: "13:55", sentiment: "neutre", priority: "haute" },
-  { id: 6, source: "Le Monde", title: "Remaniement ministériel : nouveau ministre du Numérique", category: "politique", time: "13:40", sentiment: "neutre", priority: "haute" },
-  { id: 7, source: "Bloomberg", title: "Marchés européens en hausse de 2.3% après annonces BCE", category: "concurrence", time: "13:22", sentiment: "positif", priority: "moyenne" },
-];
-
-const STATS = [
-  { label: "SOURCES ACTIVES", value: "0", sub: "/0", icon: "◉" },
-  { label: "ARTICLES CAPTÉS", value: "0", sub: "aujourd'hui", icon: "⬡" },
-  { label: "ALERTES", value: "0", sub: "non lues", icon: "⚡" },
-  { label: "SCRAPING", value: "0", sub: "uptime", icon: "◈" },
-];
-
-function GlitchText({ text, className = "" }) {
-  return (
-    <span className={className} style={{
-      position: "relative",
-      display: "inline-block",
-    }}>
-      {text}
-    </span>
-  );
+function categoryMeta(categoryId) {
+  return CATEGORIES.find((cat) => cat.id === categoryId) || CATEGORIES[0];
 }
 
-function PulsingDot({ color = "#00ff87", size = 8 }) {
-  const [opacity, setOpacity] = useState(1);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setOpacity(prev => prev === 1 ? 0.3 : 1);
-    }, 800);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <span style={{
-      display: "inline-block",
-      width: size,
-      height: size,
-      borderRadius: "50%",
-      backgroundColor: color,
-      opacity,
-      transition: "opacity 0.8s ease",
-      boxShadow: `0 0 ${size}px ${color}`,
-    }} />
-  );
+function relativeTime(dateStr) {
+  if (!dateStr) return "jamais";
+  const ts = new Date(dateStr).getTime();
+  if (Number.isNaN(ts)) return "inconnu";
+  const diffMin = Math.max(0, Math.round((Date.now() - ts) / 60000));
+  if (diffMin < 1) return "a l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return `il y a ${diffHours} h`;
+  const diffDays = Math.round(diffHours / 24);
+  return `il y a ${diffDays} j`;
 }
 
-function ScanLine() {
-  const [pos, setPos] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPos(prev => (prev + 1) % 100);
-    }, 50);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <div style={{
-      position: "absolute",
-      top: 0, left: 0, right: 0, bottom: 0,
-      pointerEvents: "none",
-      overflow: "hidden",
-      borderRadius: 12,
-    }}>
-      <div style={{
-        position: "absolute",
-        left: 0, right: 0,
-        top: `${pos}%`,
-        height: 2,
-        background: "linear-gradient(90deg, transparent, rgba(0,240,255,0.15), transparent)",
-      }} />
-    </div>
-  );
+function formatClock(value) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(value);
 }
 
-function NeonBorder({ color = "#00f0ff", children, style = {} }) {
+function statusLabel(source) {
+  if (source.status === "error") return "ERREUR";
+  if (source.status === "scanning") return "SCAN";
+  return "ACTIF";
+}
+
+function NeonCard({ color, children, style = {} }) {
   return (
-    <div style={{
-      border: `1px solid ${color}22`,
-      borderRadius: 12,
-      background: "rgba(10,10,20,0.8)",
-      backdropFilter: "blur(20px)",
-      position: "relative",
-      overflow: "hidden",
-      ...style,
-    }}>
-      <div style={{
-        position: "absolute",
-        top: 0, left: 0, right: 0,
-        height: 1,
-        background: `linear-gradient(90deg, transparent, ${color}66, transparent)`,
-      }} />
+    <div
+      style={{
+        border: `1px solid ${color}30`,
+        borderRadius: 12,
+        background: "rgba(8,10,20,0.86)",
+        boxShadow: `0 0 24px ${color}10`,
+        overflow: "hidden",
+        ...style,
+      }}
+    >
+      <div
+        style={{
+          height: 1,
+          width: "100%",
+          background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+        }}
+      />
       {children}
     </div>
   );
 }
 
-function StatCard({ stat, index }) {
-  const [count, setCount] = useState(0);
-  const numericValue = parseInt(stat.value.replace(/,/g, ""));
-  
-  useEffect(() => {
-    if (isNaN(numericValue)) { setCount(-1); return; }
-    const duration = 1500;
-    const steps = 40;
-    const increment = numericValue / steps;
-    let current = 0;
-    const timer = setInterval(() => {
-      current += increment;
-      if (current >= numericValue) {
-        setCount(numericValue);
-        clearInterval(timer);
-      } else {
-        setCount(Math.floor(current));
-      }
-    }, duration / steps);
-    return () => clearInterval(timer);
-  }, []);
+function AddSourceModal({ onClose, onSubmit, loading, error }) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [category, setCategory] = useState("tech");
 
-  const colors = ["#00f0ff", "#ff003c", "#b026ff", "#00ff87"];
-  const c = colors[index % colors.length];
+  const submit = async (event) => {
+    event.preventDefault();
+    await onSubmit({ name, url, category });
+  };
 
   return (
-    <NeonBorder color={c} style={{ padding: "20px 24px", flex: 1, minWidth: 180 }}>
-      <div style={{ fontSize: 11, letterSpacing: 3, color: "#ffffff55", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>
-        {stat.icon} {stat.label}
-      </div>
-      <div style={{ fontSize: 36, fontWeight: 800, color: c, fontFamily: "'Orbitron', sans-serif", textShadow: `0 0 30px ${c}44` }}>
-        {count === -1 ? stat.value : count.toLocaleString()}
-        <span style={{ fontSize: 16, color: "#ffffff44", marginLeft: 4 }}>{stat.sub}</span>
-      </div>
-    </NeonBorder>
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.82)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 999,
+        padding: 20,
+      }}
+    >
+      <NeonCard color="#00f0ff" style={{ width: "min(560px, 100%)", padding: 26 }}>
+        <form onClick={(event) => event.stopPropagation()} onSubmit={submit}>
+          <div
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              color: "#00f0ff",
+              fontSize: 12,
+              letterSpacing: 2,
+              marginBottom: 14,
+            }}
+          >
+            + AJOUTER UNE SOURCE
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nom de la source"
+              required
+              style={inputStyle}
+            />
+            <input
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="URL (ex: https://techcrunch.com/feed/)"
+              required
+              style={inputStyle}
+            />
+            <select value={category} onChange={(event) => setCategory(event.target.value)} style={inputStyle}>
+              {CATEGORIES.filter((cat) => cat.id !== "all").map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error && (
+            <div style={{ color: "#ff5f7a", marginTop: 12, fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <button type="button" onClick={onClose} style={secondaryButtonStyle}>
+              Annuler
+            </button>
+            <button type="submit" disabled={loading} style={primaryButtonStyle}>
+              {loading ? "Ajout..." : "Ajouter et scanner"}
+            </button>
+          </div>
+        </form>
+      </NeonCard>
+    </div>
   );
 }
 
-function SourceRow({ source }) {
-  const cat = CATEGORIES.find(c => c.id === source.category);
-  const statusColors = { active: "#00ff87", scanning: "#00f0ff", error: "#ff003c" };
-  const statusLabels = { active: "ACTIF", scanning: "SCAN...", error: "ERREUR" };
+const inputStyle = {
+  width: "100%",
+  borderRadius: 8,
+  border: "1px solid #00f0ff33",
+  background: "#080b16",
+  color: "#ffffff",
+  padding: "12px 14px",
+  outline: "none",
+  fontFamily: "'Exo 2', sans-serif",
+};
+
+const primaryButtonStyle = {
+  flex: 1,
+  borderRadius: 8,
+  border: "1px solid #00f0ff88",
+  background: "linear-gradient(135deg, #00f0ff22, #0080ff22)",
+  color: "#00f0ff",
+  padding: "11px 14px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+
+const secondaryButtonStyle = {
+  flex: 1,
+  borderRadius: 8,
+  border: "1px solid #ffffff20",
+  background: "transparent",
+  color: "#ffffffa8",
+  padding: "11px 14px",
+  cursor: "pointer",
+};
+
+function Stat({ label, value, sub, color }) {
+  return (
+    <NeonCard color={color} style={{ padding: "16px 20px", flex: 1, minWidth: 210 }}>
+      <div style={{ color: "#ffffff88", fontSize: 11, letterSpacing: 2, fontFamily: "'JetBrains Mono', monospace" }}>{label}</div>
+      <div style={{ color, fontSize: 34, fontWeight: 800, marginTop: 6, fontFamily: "'Orbitron', sans-serif" }}>{value}</div>
+      <div style={{ color: "#ffffff55", marginTop: 3, fontSize: 12 }}>{sub}</div>
+    </NeonCard>
+  );
+}
+
+function SourceRow({ source, onScan, onDelete }) {
+  const cat = categoryMeta(source.category);
 
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      padding: "14px 20px",
-      borderBottom: "1px solid #ffffff08",
-      transition: "background 0.2s",
-      cursor: "pointer",
-    }}
-    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,240,255,0.04)"}
-    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "2fr 1fr 1fr 1fr 90px 100px",
+        gap: 10,
+        alignItems: "center",
+        borderBottom: "1px solid #ffffff12",
+        padding: "12px 16px",
+        fontSize: 13,
+      }}
     >
-      <div style={{ width: 36, display: "flex", justifyContent: "center" }}>
-        <PulsingDot color={statusColors[source.status]} size={source.status === "scanning" ? 10 : 8} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{source.name}</div>
+        <a href={source.url} target="_blank" rel="noreferrer" style={{ color: "#7ec7ff", textDecoration: "none", fontSize: 12 }}>
+          {source.url}
+        </a>
+        {source.lastError && <div style={{ color: "#ff5f7a", fontSize: 11, marginTop: 2 }}>{source.lastError}</div>}
       </div>
-      <div style={{ flex: 2, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffffdd" }}>{source.name}</div>
-        <div style={{ fontSize: 11, color: "#ffffff44", fontFamily: "'JetBrains Mono', monospace" }}>{source.url}</div>
-      </div>
-      <div style={{ width: 120 }}>
-        <span style={{
-          fontSize: 10,
-          letterSpacing: 2,
-          padding: "4px 10px",
-          borderRadius: 4,
-          background: `${cat?.color}15`,
-          color: cat?.color,
-          border: `1px solid ${cat?.color}33`,
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          {cat?.label}
+
+      <div>
+        <span
+          style={{
+            border: `1px solid ${cat.color}66`,
+            color: cat.color,
+            borderRadius: 6,
+            padding: "3px 8px",
+            fontSize: 11,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}
+        >
+          {cat.label}
         </span>
       </div>
-      <div style={{ width: 100, fontSize: 12, color: "#ffffff55", fontFamily: "'JetBrains Mono', monospace" }}>
-        {statusLabels[source.status]}
-      </div>
-      <div style={{ width: 100, fontSize: 12, color: "#ffffff55", textAlign: "right" }}>
-        {source.lastScan}
-      </div>
-      <div style={{ width: 80, fontSize: 14, color: "#ffffffcc", textAlign: "right", fontWeight: 600 }}>
-        {source.articles.toLocaleString()}
-      </div>
-      <div style={{ width: 60, fontSize: 12, textAlign: "right", color: source.trend.includes("+") ? "#00ff87" : "#ffffff44", fontFamily: "'JetBrains Mono', monospace" }}>
-        {source.trend}
+
+      <div style={{ color: STATUS_COLORS[source.status] || "#ffffff" }}>{statusLabel(source)}</div>
+      <div style={{ color: "#ffffff88" }}>{source.lastScanLabel || relativeTime(source.lastScan)}</div>
+      <div style={{ color: "#ffffffcc", textAlign: "right", fontWeight: 700 }}>{source.articles || 0}</div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <button onClick={() => onScan(source.id)} style={miniActionButton("#00f0ff")}>
+          Scan
+        </button>
+        <button onClick={() => onDelete(source.id)} style={miniActionButton("#ff003c")}>
+          Suppr
+        </button>
       </div>
     </div>
   );
+}
+
+function miniActionButton(color) {
+  return {
+    border: `1px solid ${color}55`,
+    color,
+    background: "transparent",
+    borderRadius: 6,
+    padding: "5px 8px",
+    cursor: "pointer",
+    fontSize: 11,
+  };
 }
 
 function FeedItem({ item }) {
-  const cat = CATEGORIES.find(c => c.id === item.category);
-  const priorityColors = { critique: "#ff003c", haute: "#ffb800", moyenne: "#00f0ff" };
-  const sentimentIcons = { positif: "▲", négatif: "▼", neutre: "◆" };
-  const sentimentColors = { positif: "#00ff87", négatif: "#ff003c", neutre: "#ffffff44" };
+  const cat = categoryMeta(item.category);
+  const priorityColor = item.priority === "critique" ? "#ff003c" : item.priority === "haute" ? "#ffb800" : "#00f0ff";
 
   return (
-    <div style={{
-      padding: "16px 20px",
-      borderBottom: "1px solid #ffffff08",
-      borderLeft: `3px solid ${priorityColors[item.priority]}`,
-      cursor: "pointer",
-      transition: "background 0.2s",
-    }}
-    onMouseEnter={e => e.currentTarget.style.background = "rgba(0,240,255,0.04)"}
-    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+    <a
+      href={item.url}
+      target="_blank"
+      rel="noreferrer"
+      style={{
+        display: "block",
+        textDecoration: "none",
+        borderBottom: "1px solid #ffffff12",
+        padding: "12px 16px",
+      }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span style={{ fontSize: 10, color: cat?.color, letterSpacing: 2, fontFamily: "'JetBrains Mono', monospace" }}>
-            {item.source.toUpperCase()}
-          </span>
-          <span style={{ fontSize: 10, color: "#ffffff33" }}>|</span>
-          <span style={{
-            fontSize: 9,
-            padding: "2px 8px",
-            borderRadius: 3,
-            background: `${priorityColors[item.priority]}18`,
-            color: priorityColors[item.priority],
-            letterSpacing: 1,
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>
-            {item.priority.toUpperCase()}
-          </span>
-        </div>
-        <span style={{ fontSize: 11, color: "#ffffff33", fontFamily: "'JetBrains Mono', monospace" }}>{item.time}</span>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 5, flexWrap: "wrap" }}>
+        <span style={{ color: cat.color, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{cat.label}</span>
+        <span style={{ color: "#ffffff66", fontSize: 11 }}>{item.sourceName}</span>
+        <span style={{ color: priorityColor, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}>{item.priority?.toUpperCase()}</span>
+        <span style={{ color: "#ffffff66", fontSize: 11 }}>{relativeTime(item.createdAt)}</span>
       </div>
-      <div style={{ fontSize: 14, color: "#ffffffcc", lineHeight: 1.5, marginBottom: 6 }}>
-        {item.title}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ color: sentimentColors[item.sentiment], fontSize: 10 }}>{sentimentIcons[item.sentiment]}</span>
-        <span style={{ fontSize: 10, color: sentimentColors[item.sentiment], fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1 }}>
-          {item.sentiment.toUpperCase()}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function AddSourceModal({ onClose }) {
-  const [url, setUrl] = useState("");
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("politique");
-
-  return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(0,0,0,0.85)",
-      backdropFilter: "blur(10px)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      zIndex: 1000,
-    }} onClick={onClose}>
-      <NeonBorder color="#00f0ff" style={{ padding: 40, width: 480, maxWidth: "90vw" }}>
-        <div onClick={e => e.stopPropagation()}>
-          <div style={{ fontSize: 11, letterSpacing: 4, color: "#00f0ff", marginBottom: 24, fontFamily: "'JetBrains Mono', monospace" }}>
-            ◈ NOUVELLE SOURCE
-          </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 10, letterSpacing: 2, color: "#ffffff44", display: "block", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>NOM</label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Ex: Financial Times"
-              style={{
-                width: "100%", padding: "12px 16px",
-                background: "rgba(0,240,255,0.05)",
-                border: "1px solid #00f0ff22",
-                borderRadius: 8, color: "#fff",
-                fontSize: 14, outline: "none",
-                fontFamily: "'JetBrains Mono', monospace",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 10, letterSpacing: 2, color: "#ffffff44", display: "block", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>URL</label>
-            <input
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="https://ft.com"
-              style={{
-                width: "100%", padding: "12px 16px",
-                background: "rgba(0,240,255,0.05)",
-                border: "1px solid #00f0ff22",
-                borderRadius: 8, color: "#fff",
-                fontSize: 14, outline: "none",
-                fontFamily: "'JetBrains Mono', monospace",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: 28 }}>
-            <label style={{ fontSize: 10, letterSpacing: 2, color: "#ffffff44", display: "block", marginBottom: 8, fontFamily: "'JetBrains Mono', monospace" }}>CATÉGORIE</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {CATEGORIES.filter(c => c.id !== "all").map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setCategory(cat.id)}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 6,
-                    border: `1px solid ${category === cat.id ? cat.color : "#ffffff15"}`,
-                    background: category === cat.id ? `${cat.color}18` : "transparent",
-                    color: category === cat.id ? cat.color : "#ffffff55",
-                    fontSize: 10,
-                    letterSpacing: 2,
-                    cursor: "pointer",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <button
-              onClick={onClose}
-              style={{
-                flex: 1, padding: "14px",
-                borderRadius: 8, border: "1px solid #ffffff15",
-                background: "transparent", color: "#ffffff55",
-                fontSize: 12, letterSpacing: 2, cursor: "pointer",
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            >
-              ANNULER
-            </button>
-            <button
-              style={{
-                flex: 2, padding: "14px",
-                borderRadius: 8, border: "1px solid #00f0ff44",
-                background: "linear-gradient(135deg, #00f0ff15, #00f0ff08)",
-                color: "#00f0ff",
-                fontSize: 12, letterSpacing: 2, cursor: "pointer",
-                fontFamily: "'JetBrains Mono', monospace",
-                boxShadow: "0 0 20px rgba(0,240,255,0.1)",
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 30px rgba(0,240,255,0.25)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = "0 0 20px rgba(0,240,255,0.1)"}
-            >
-              ⚡ LANCER LE SCRAPING
-            </button>
-          </div>
-        </div>
-      </NeonBorder>
-    </div>
-  );
-}
-
-function MiniGraph() {
-  const points = Array.from({ length: 24 }, (_, i) => ({
-    x: i,
-    y: 30 + Math.random() * 50 + (i > 18 ? 20 : 0),
-  }));
-  const max = Math.max(...points.map(p => p.y));
-  const svgW = 280, svgH = 80;
-  const path = points.map((p, i) => {
-    const x = (p.x / 23) * svgW;
-    const y = svgH - (p.y / max) * svgH;
-    return `${i === 0 ? "M" : "L"}${x},${y}`;
-  }).join(" ");
-  const areaPath = path + ` L${svgW},${svgH} L0,${svgH} Z`;
-
-  return (
-    <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="graphGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill="url(#graphGrad)" />
-      <path d={path} fill="none" stroke="#00f0ff" strokeWidth="2" />
-    </svg>
+      <div style={{ color: "#ffffffee", fontWeight: 600 }}>{item.title}</div>
+      {item.summary && <div style={{ color: "#ffffff88", fontSize: 13, marginTop: 4 }}>{item.summary}</div>}
+    </a>
   );
 }
 
 export default function ONYXRadar({ onBack }) {
   const [activeCategory, setActiveCategory] = useState("all");
-  const [showAddSource, setShowAddSource] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState("sources");
+  const [clock, setClock] = useState(new Date());
+
+  const [stats, setStats] = useState({
+    sourcesActive: 0,
+    totalSources: 0,
+    articlesToday: 0,
+    alerts: 0,
+    scrapingUptime: 0,
+    lastGlobalScan: null,
+    scanInProgress: false,
+  });
+  const [sources, setSources] = useState([]);
+  const [feed, setFeed] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [globalError, setGlobalError] = useState("");
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState("");
+
+  const fetchDashboard = useCallback(
+    async (withLoader = false) => {
+      if (withLoader) setLoading(true);
+      try {
+        const [statsRes, sourcesRes, feedRes] = await Promise.all([
+          fetch("/api/stats"),
+          fetch(`/api/sources?category=${encodeURIComponent(activeCategory)}`),
+          fetch(`/api/feed?category=${encodeURIComponent(activeCategory)}&limit=60`),
+        ]);
+
+        if (!statsRes.ok || !sourcesRes.ok || !feedRes.ok) {
+          throw new Error("Impossible de charger les donnees");
+        }
+
+        const statsData = await statsRes.json();
+        const sourcesData = await sourcesRes.json();
+        const feedData = await feedRes.json();
+
+        setStats(statsData);
+        setSources(Array.isArray(sourcesData.sources) ? sourcesData.sources : []);
+        setFeed(Array.isArray(feedData.feed) ? feedData.feed : []);
+        setGlobalError("");
+      } catch (error) {
+        setGlobalError(error instanceof Error ? error.message : "Erreur reseau");
+      } finally {
+        if (withLoader) setLoading(false);
+      }
+    },
+    [activeCategory],
+  );
 
   useEffect(() => {
-    const link = document.createElement("link");
-    link.href = "https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;800;900&family=JetBrains+Mono:wght@300;400;500;600;700&family=Exo+2:wght@300;400;600;700&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    fetchDashboard(true);
+  }, [fetchDashboard]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const filteredSources = activeCategory === "all" ? MOCK_SOURCES : MOCK_SOURCES.filter(s => s.category === activeCategory);
-  const filteredFeed = activeCategory === "all" ? MOCK_FEED : MOCK_FEED.filter(f => f.category === activeCategory);
+  useEffect(() => {
+    const poll = setInterval(() => {
+      fetchDashboard(false);
+    }, 20000);
+    return () => clearInterval(poll);
+  }, [fetchDashboard]);
+
+  const addSource = async ({ name, url, category }) => {
+    setModalLoading(true);
+    setModalError("");
+    try {
+      const res = await fetch("/api/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, url, category }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Ajout impossible");
+      }
+
+      setShowModal(false);
+      await fetchDashboard(false);
+    } catch (error) {
+      setModalError(error instanceof Error ? error.message : "Erreur inconnue");
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const scanAll = async () => {
+    setScanBusy(true);
+    try {
+      await fetch("/api/scan", { method: "POST" });
+      setTimeout(() => fetchDashboard(false), 1000);
+      setTimeout(() => fetchDashboard(false), 4000);
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const scanOne = async (id) => {
+    await fetch(`/api/sources/${id}/scan`, { method: "POST" });
+    setTimeout(() => fetchDashboard(false), 1000);
+  };
+
+  const deleteOne = async (id) => {
+    await fetch(`/api/sources/${id}`, { method: "DELETE" });
+    await fetchDashboard(false);
+  };
+
+  const subtitle = useMemo(() => {
+    if (stats.scanInProgress || scanBusy) return "SCAN EN COURS";
+    if (stats.lastGlobalScan) return `Dernier scan ${relativeTime(stats.lastGlobalScan)}`;
+    return "Pret a scanner";
+  }, [stats.scanInProgress, stats.lastGlobalScan, scanBusy]);
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#06060e",
-      color: "#fff",
-      fontFamily: "'Exo 2', sans-serif",
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      {/* Background grid */}
-      <div style={{
-        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-        backgroundImage: `
-          linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px)
-        `,
-        backgroundSize: "60px 60px",
-        pointerEvents: "none",
-      }} />
-
-      {/* Ambient glow */}
-      <div style={{
-        position: "fixed", top: -200, right: -200,
-        width: 600, height: 600,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(0,240,255,0.06), transparent 70%)",
-        pointerEvents: "none",
-      }} />
-      <div style={{
-        position: "fixed", bottom: -200, left: -100,
-        width: 500, height: 500,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(176,38,255,0.05), transparent 70%)",
-        pointerEvents: "none",
-      }} />
-
-      {/* Header */}
-      <header style={{
-        padding: "20px 40px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid #ffffff08",
-        position: "relative",
-        zIndex: 10,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          {onBack && <button onClick={onBack} style={{ background: "none", border: "1px solid #ffffff15", borderRadius: 8, color: "#ffffff66", cursor: "pointer", padding: "6px 14px", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1, transition: "all 0.2s" }} onMouseEnter={e=>{e.target.style.borderColor="#00f0ff44";e.target.style.color="#00f0ff";}} onMouseLeave={e=>{e.target.style.borderColor="#ffffff15";e.target.style.color="#ffffff66";}}>← Accueil</button>}
-          <div style={{
-            width: 40, height: 40,
-            background: "linear-gradient(135deg, #00f0ff, #b026ff)",
-            borderRadius: 8,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 18, fontWeight: 900,
-            fontFamily: "'Orbitron', sans-serif",
-            boxShadow: "0 0 20px rgba(0,240,255,0.3)",
-          }}>
-            O
-          </div>
-          <div>
-            <div style={{
-              fontSize: 20, fontWeight: 800, letterSpacing: 6,
-              fontFamily: "'Orbitron', sans-serif",
-              background: "linear-gradient(90deg, #00f0ff, #b026ff)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}>
-              ONYX
+    <div
+      style={{
+        minHeight: "100vh",
+        color: "#fff",
+        background: "radial-gradient(circle at 15% 10%, #07172d 0%, #05050b 45%, #020204 100%)",
+        fontFamily: "'Exo 2', sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: 1320, margin: "0 auto", padding: "20px 16px 28px" }}>
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {onBack && (
+              <button onClick={onBack} style={secondaryButtonStyle}>
+                ← Accueil
+              </button>
+            )}
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 10,
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 900,
+                background: "linear-gradient(135deg, #00f0ff, #b026ff)",
+                boxShadow: "0 0 28px #00f0ff55",
+              }}
+            >
+              O
             </div>
-            <div style={{ fontSize: 9, letterSpacing: 4, color: "#00f0ff88", fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>
-              RADAR MODULE
+            <div>
+              <div style={{ fontFamily: "'Orbitron', sans-serif", letterSpacing: 4, fontSize: 20 }}>ONYX RADAR</div>
+              <div style={{ color: "#8fd3ff", fontSize: 12 }}>{subtitle}</div>
             </div>
           </div>
+
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: "#00f0ff", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>{formatClock(clock)}</div>
+            <div style={{ color: "#ffffff88", fontSize: 12 }}>SYSTEM ONLINE</div>
+          </div>
+        </header>
+
+        {globalError && (
+          <NeonCard color="#ff003c" style={{ marginBottom: 12, padding: "12px 14px", color: "#ff9db0" }}>
+            {globalError}
+          </NeonCard>
+        )}
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <Stat label="SOURCES" value={`${stats.sourcesActive}/${stats.totalSources}`} sub="actives" color="#00f0ff" />
+          <Stat label="ARTICLES" value={stats.articlesToday} sub="aujourd'hui" color="#ffb800" />
+          <Stat label="ALERTES" value={stats.alerts} sub="24h" color="#ff003c" />
+          <Stat label="UPTIME" value={`${stats.scrapingUptime}%`} sub="collecte" color="#00ff87" />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <div style={{
-            fontSize: 12, color: "#ffffff44",
-            fontFamily: "'JetBrains Mono', monospace",
-            letterSpacing: 2,
-          }}>
-            {currentTime.toLocaleTimeString("fr-FR")}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <PulsingDot color="#00ff87" />
-            <span style={{ fontSize: 10, color: "#00ff87", letterSpacing: 2, fontFamily: "'JetBrains Mono', monospace" }}>
-              SYSTEM ONLINE
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main content */}
-      <main style={{ padding: "24px 40px", position: "relative", zIndex: 10 }}>
-        {/* Stats row */}
-        <div style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
-          {STATS.map((stat, i) => (
-            <StatCard key={stat.label} stat={stat} index={i} />
-          ))}
-        </div>
-
-        {/* Activity graph */}
-        <NeonBorder color="#00f0ff" style={{ padding: "16px 24px", marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 10, letterSpacing: 3, color: "#ffffff44", fontFamily: "'JetBrains Mono', monospace" }}>
-              ◈ ACTIVITÉ DE COLLECTE — 24H
-            </span>
-            <span style={{ fontSize: 10, color: "#00f0ff88", fontFamily: "'JetBrains Mono', monospace" }}>
-              2,847 articles captés
-            </span>
-          </div>
-          <MiniGraph />
-          <ScanLine />
-        </NeonBorder>
-
-        {/* Category filters */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-          {CATEGORIES.map(cat => (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               style={{
-                padding: "8px 18px",
-                borderRadius: 6,
-                border: `1px solid ${activeCategory === cat.id ? cat.color : "#ffffff10"}`,
-                background: activeCategory === cat.id ? `${cat.color}12` : "transparent",
-                color: activeCategory === cat.id ? cat.color : "#ffffff44",
-                fontSize: 10,
-                letterSpacing: 2,
+                border: `1px solid ${activeCategory === cat.id ? cat.color : "#ffffff22"}`,
+                background: activeCategory === cat.id ? `${cat.color}22` : "transparent",
+                color: activeCategory === cat.id ? cat.color : "#ffffff88",
+                borderRadius: 999,
+                padding: "7px 12px",
+                fontSize: 12,
                 cursor: "pointer",
                 fontFamily: "'JetBrains Mono', monospace",
-                transition: "all 0.3s",
               }}
             >
               {cat.label}
@@ -559,102 +495,94 @@ export default function ONYXRadar({ onBack }) {
           ))}
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 0, marginBottom: 0 }}>
-          {["sources", "feed"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                padding: "12px 28px",
-                border: "1px solid #ffffff08",
-                borderBottom: activeTab === tab ? "1px solid transparent" : "1px solid #ffffff08",
-                borderRadius: "8px 8px 0 0",
-                background: activeTab === tab ? "rgba(10,10,20,0.8)" : "transparent",
-                color: activeTab === tab ? "#00f0ff" : "#ffffff33",
-                fontSize: 11,
-                letterSpacing: 2,
-                cursor: "pointer",
-                fontFamily: "'JetBrains Mono', monospace",
-                transition: "all 0.2s",
-              }}
-            >
-              {tab === "sources" ? "◉ SOURCES" : "⚡ FLUX EN DIRECT"}
-            </button>
-          ))}
-          <div style={{ flex: 1, borderBottom: "1px solid #ffffff08" }} />
-          <button
-            onClick={() => setShowAddSource(true)}
-            style={{
-              padding: "10px 24px",
-              borderRadius: "8px 8px 0 0",
-              border: "1px solid #00f0ff33",
-              borderBottom: "none",
-              background: "linear-gradient(135deg, rgba(0,240,255,0.08), transparent)",
-              color: "#00f0ff",
-              fontSize: 11,
-              letterSpacing: 2,
-              cursor: "pointer",
-              fontFamily: "'JetBrains Mono', monospace",
-              boxShadow: "0 -2px 15px rgba(0,240,255,0.08)",
-              transition: "all 0.2s",
-            }}
-            onMouseEnter={e => e.currentTarget.style.boxShadow = "0 -2px 25px rgba(0,240,255,0.15)"}
-            onMouseLeave={e => e.currentTarget.style.boxShadow = "0 -2px 15px rgba(0,240,255,0.08)"}
-          >
-            + AJOUTER SOURCE
+        <div style={{ display: "flex", gap: 8, marginBottom: 0 }}>
+          <button onClick={() => setActiveTab("sources")} style={tabStyle(activeTab === "sources")}>
+            SOURCES
+          </button>
+          <button onClick={() => setActiveTab("feed")} style={tabStyle(activeTab === "feed")}>
+            FLUX LIVE
+          </button>
+          <div style={{ flex: 1 }} />
+          <button onClick={scanAll} disabled={scanBusy || stats.scanInProgress} style={miniActionButton("#00ff87")}>
+            {scanBusy || stats.scanInProgress ? "Scan..." : "Scanner tout"}
+          </button>
+          <button onClick={() => setShowModal(true)} style={miniActionButton("#00f0ff")}>
+            + Source
           </button>
         </div>
 
-        {/* Content panel */}
-        <NeonBorder color="#00f0ff" style={{ borderRadius: "0 0 12px 12px", borderTop: "none" }}>
-          {activeTab === "sources" ? (
+        <NeonCard color="#00f0ff" style={{ borderTopLeftRadius: 0, overflowX: "auto" }}>
+          {loading ? (
+            <div style={{ padding: 20, color: "#ffffff88" }}>Chargement...</div>
+          ) : activeTab === "sources" ? (
             <>
-              <div style={{
-                display: "flex",
-                padding: "12px 20px",
-                borderBottom: "1px solid #ffffff10",
-                fontSize: 9,
-                letterSpacing: 2,
-                color: "#ffffff33",
-                fontFamily: "'JetBrains Mono', monospace",
-              }}>
-                <div style={{ width: 36 }} />
-                <div style={{ flex: 2 }}>SOURCE</div>
-                <div style={{ width: 120 }}>CATÉGORIE</div>
-                <div style={{ width: 100 }}>STATUT</div>
-                <div style={{ width: 100, textAlign: "right" }}>DERNIER SCAN</div>
-                <div style={{ width: 80, textAlign: "right" }}>ARTICLES</div>
-                <div style={{ width: 60, textAlign: "right" }}>TREND</div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr 1fr 1fr 90px 100px",
+                  gap: 10,
+                  padding: "10px 16px",
+                  borderBottom: "1px solid #ffffff1a",
+                  fontSize: 11,
+                  color: "#ffffff88",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                <div>SOURCE</div>
+                <div>CATEGORIE</div>
+                <div>STATUT</div>
+                <div>DERNIER SCAN</div>
+                <div style={{ textAlign: "right" }}>ART.</div>
+                <div style={{ textAlign: "right" }}>ACTIONS</div>
               </div>
-              {filteredSources.map(source => (
-                <SourceRow key={source.id} source={source} />
-              ))}
+              {sources.length === 0 ? (
+                <div style={{ padding: 20, color: "#ffffff88" }}>Aucune source pour ce filtre.</div>
+              ) : (
+                sources.map((source) => (
+                  <SourceRow key={source.id} source={source} onScan={scanOne} onDelete={deleteOne} />
+                ))
+              )}
             </>
           ) : (
-            filteredFeed.map(item => (
-              <FeedItem key={item.id} item={item} />
-            ))
+            <>
+              {feed.length === 0 ? (
+                <div style={{ padding: 20, color: "#ffffff88" }}>Aucun article collecté pour le moment.</div>
+              ) : (
+                feed.map((item) => <FeedItem key={item.id} item={item} />)
+              )}
+            </>
           )}
-        </NeonBorder>
-      </main>
+        </NeonCard>
+      </div>
 
-      {/* Footer */}
-      <footer style={{
-        padding: "16px 40px",
-        borderTop: "1px solid #ffffff08",
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: 10,
-        color: "#ffffff22",
-        fontFamily: "'JetBrains Mono', monospace",
-        letterSpacing: 2,
-      }}>
-        <span>ONYX RADAR v1.0.0-alpha</span>
-        <span>SUITE ONYX — RADAR · PULSE · BOARD · BRIEF</span>
-      </footer>
-
-      {showAddSource && <AddSourceModal onClose={() => setShowAddSource(false)} />}
+      {showModal && (
+        <AddSourceModal
+          onClose={() => {
+            if (!modalLoading) {
+              setShowModal(false);
+              setModalError("");
+            }
+          }}
+          onSubmit={addSource}
+          loading={modalLoading}
+          error={modalError}
+        />
+      )}
     </div>
   );
+}
+
+function tabStyle(active) {
+  return {
+    border: "1px solid #ffffff24",
+    borderBottom: "none",
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    background: active ? "#0b1124" : "transparent",
+    color: active ? "#00f0ff" : "#ffffff88",
+    cursor: "pointer",
+    padding: "10px 14px",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 12,
+  };
 }

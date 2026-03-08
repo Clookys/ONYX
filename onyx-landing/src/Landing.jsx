@@ -240,7 +240,7 @@ export default function OnyxProductPage({ onOpenRadar }) {
         </p>
 
         <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-          <button style={{
+          <button onClick={onOpenRadar} style={{
             padding: "16px 40px",
             borderRadius: 12,
             border: "none",
