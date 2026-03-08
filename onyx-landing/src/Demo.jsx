@@ -1,3 +1,22 @@
+const APP_JSX_CODE = `import { useState } from "react";
+import Landing from "./Landing.jsx";
+import Demo from "./Demo.jsx";
+import Radar from "./Radar.jsx";
+
+export default function App() {
+  const [page, setPage] = useState("landing");
+
+  if (page === "demo") {
+    return <Demo onBackToLanding={() => setPage("landing")} onOpenRadar={() => setPage("radar")} />;
+  }
+
+  if (page === "radar") {
+    return <Radar onBack={() => setPage("demo")} />;
+  }
+
+  return <Landing onOpenDemo={() => setPage("demo")} />;
+}`;
+
 export default function Demo({ onBackToLanding, onOpenRadar }) {
   return (
     <div
@@ -50,6 +69,45 @@ export default function Demo({ onBackToLanding, onOpenRadar }) {
         >
           ONYX DEMO
         </h1>
+
+        <div
+          style={{
+            textAlign: "left",
+            borderRadius: 12,
+            border: "1px solid #00f0ff33",
+            background: "rgba(0, 0, 0, 0.45)",
+            padding: "18px",
+            margin: "0 auto 24px",
+            maxWidth: 760,
+            boxShadow: "inset 0 0 20px rgba(0,240,255,0.08)",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              letterSpacing: 2,
+              color: "#00f0ffcc",
+              textTransform: "uppercase",
+              marginBottom: 10,
+            }}
+          >
+            App.jsx
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              color: "#d8f9ff",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 12,
+              lineHeight: 1.6,
+            }}
+          >
+            <code>{APP_JSX_CODE}</code>
+          </pre>
+        </div>
 
         <p
           style={{
