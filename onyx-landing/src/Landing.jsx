@@ -132,7 +132,7 @@ function ConnectionLines() {
   );
 }
 
-export default function OnyxProductPage({ onOpenRadar }) {
+export default function OnyxProductPage({ onOpenRadar, onOpenRadarV10 }) {
   const [activeModule, setActiveModule] = useState(null);
   const [scrollY, setScrollY] = useState(0);
 
@@ -271,6 +271,21 @@ export default function OnyxProductPage({ onOpenRadar }) {
             transition: "all 0.3s",
           }}>
             Voir la démo
+          </button>
+          <button onClick={onOpenRadarV10} style={{
+            padding: "16px 28px",
+            borderRadius: 12,
+            border: "1px solid #00f0ff66",
+            background: "rgba(0,240,255,0.07)",
+            color: "#00f0ff",
+            fontSize: 15,
+            fontWeight: 600,
+            letterSpacing: 1,
+            cursor: "pointer",
+            fontFamily: "'Outfit', sans-serif",
+            transition: "all 0.3s",
+          }}>
+            Acceder a ONIX Radar
           </button>
         </div>
 
