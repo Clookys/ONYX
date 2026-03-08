@@ -6,17 +6,18 @@ ONYX is deployable on Render as a single Node web service with:
 - automated RSS / HTML collection
 - a REST API for the Radar UI
 - storage that can run on local JSON or on Supabase
+- Claude-backed intelligent setup for `RadarV10`
 
 ## Current modules in the repo
 
 - `Landing.jsx`: product landing page
 - `Radar.jsx`: live ONYX Radar dashboard powered by `/api`
-- `RadarV10.jsx`: advanced prototype kept in the frontend for future integration
-- `server/index.js`: scraping, API, scheduling, persistence layer
+- `RadarV10.jsx`: advanced Radar experience routed from the landing page
+- `server/index.js`: scraping, API, scheduling, persistence layer and Claude proxy
 
 ## Data storage modes
 
-The backend now supports two storage modes:
+The backend supports two storage modes:
 - local JSON fallback in `data/onyx.json`
 - Supabase via `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
 
@@ -41,6 +42,8 @@ Optional:
 - `SUPABASE_STORE_TABLE` (default: `onyx_store`)
 - `SCAN_INTERVAL_MS` (default: `300000`)
 - `DATA_DIR` (used only for local JSON fallback)
+- `CLAUDE_KEY` (required for the intelligent setup in `RadarV10`)
+- `CLAUDE_MODEL` (default: `claude-sonnet-4-20250514`)
 
 ## Supabase setup
 
@@ -49,7 +52,13 @@ Optional:
 3. Add `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on Render.
 4. Redeploy the service.
 
+## Claude setup
+
+1. Add `CLAUDE_KEY` on Render.
+2. Optionally set `CLAUDE_MODEL`.
+3. `RadarV10` will call `/api/ai/radar-setup`, and the backend will forward the request to Anthropic.
+
 ## Notes
 
-- The current frontend still talks only to `/api`, so no frontend secret is required for storage.
-- `RadarV10.jsx` still contains a direct Anthropic call in the client prototype. That should be moved server-side before production use.
+- The frontend talks only to `/api`, so no frontend secret is required for storage or Claude calls.
+- The Claude key remains server-side on Render.
