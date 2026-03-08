@@ -418,7 +418,8 @@ export default function ONYXRadar({ onBack }) {
         fontFamily: "'Exo 2', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 1320, margin: "0 auto", padding: "20px 16px 28px" }}>
+      <div style={{ transform: "scale(1.08)", transformOrigin: "top left", width: "calc(100% / 1.08)", minHeight: "calc(100vh / 1.08)" }}>
+        <div style={{ maxWidth: 1320, margin: "0 auto", padding: "20px 16px 28px" }}>
         <header
           style={{
             display: "flex",
@@ -432,7 +433,7 @@ export default function ONYXRadar({ onBack }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {onBack && (
               <button onClick={onBack} style={secondaryButtonStyle}>
-                ← Accueil
+                â† Accueil
               </button>
             )}
             <div
@@ -546,13 +547,14 @@ export default function ONYXRadar({ onBack }) {
           ) : (
             <>
               {feed.length === 0 ? (
-                <div style={{ padding: 20, color: "#ffffff88" }}>Aucun article collecté pour le moment.</div>
+                <div style={{ padding: 20, color: "#ffffff88" }}>Aucun article collectÃ© pour le moment.</div>
               ) : (
                 feed.map((item) => <FeedItem key={item.id} item={item} />)
               )}
             </>
           )}
         </NeonCard>
+      </div>
       </div>
 
       {showModal && (
