@@ -14,7 +14,7 @@ const INIT_ENGINES = [
 
 const INIT_SRC=[
   {id:"sf_world",name:"World Live",color:"#00f0ff",exp:true,sources:[
-    {id:"w1",name:"Reuters World",url:"https://feeds.reuters.com/reuters/worldNews",type:"rss",ok:true,withStatic:false},
+    {id:"w1",name:"BBC World",url:"https://feeds.bbci.co.uk/news/world/rss.xml",type:"rss",ok:true,withStatic:false},
     {id:"w2",name:"Al Jazeera",url:"https://www.aljazeera.com/xml/rss/all.xml",type:"rss",ok:true,withStatic:false},
     {id:"w3",name:"The Guardian World",url:"https://www.theguardian.com/world/rss",type:"rss",ok:true,withStatic:false},
     {id:"w4",name:"UN News",url:"https://news.un.org/feed/subscribe/en/news/all/rss.xml",type:"rss",ok:true,withStatic:false},
@@ -72,6 +72,65 @@ const scoreSignal = (txt) => {
   return score;
 };
 const signalLevel = (score) => (score >= 3 ? "High" : score >= 2 ? "Medium" : "Low");
+
+const normalizeFeedItems=(items=[])=>items.map((i)=>({
+  title: String(i?.title||""),
+  link: String(i?.link||i?.guid||""),
+  description: String(i?.description||i?.summary||""),
+  content: String(i?.content||i?.description||i?.summary||""),
+  pubDate: String(i?.pubDate||i?.published||i?.updated||""),
+})).filter(i=>i.title||i.link);
+
+const parseXmlFeed=(xmlText)=>{
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(xmlText,"text/xml");
+  const hasError=doc.querySelector("parsererror");
+  if(hasError)return [];
+  const nodes=Array.from(doc.querySelectorAll("item, entry"));
+  return normalizeFeedItems(nodes.map((n)=>{
+    const linkNode=n.querySelector("link");
+    const href=linkNode?.getAttribute?.("href");
+    const link=href||linkNode?.textContent||n.querySelector("guid")?.textContent||"";
+    return {
+      title:n.querySelector("title")?.textContent||"",
+      link,
+      description:n.querySelector("description")?.textContent||n.querySelector("summary")?.textContent||"",
+      content:n.querySelector("content\\:encoded")?.textContent||n.querySelector("content")?.textContent||n.querySelector("description")?.textContent||"",
+      pubDate:n.querySelector("pubDate")?.textContent||n.querySelector("published")?.textContent||n.querySelector("updated")?.textContent||"",
+    };
+  }));
+};
+
+const fetchFeedItems=async(srcUrl)=>{
+  const rss2jsonUrl=`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(srcUrl)}&count=30`;
+  try{
+    const r=await fetch(rss2jsonUrl);
+    const d=await r.json();
+    if(d?.status==="ok"&&Array.isArray(d.items)&&d.items.length){
+      return normalizeFeedItems(d.items);
+    }
+  }catch{}
+
+  try{
+    const r=await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(srcUrl)}`);
+    if(r.ok){
+      const xml=await r.text();
+      const parsed=parseXmlFeed(xml);
+      if(parsed.length)return parsed;
+    }
+  }catch{}
+
+  try{
+    const r=await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(srcUrl)}`);
+    if(r.ok){
+      const d=await r.json();
+      const parsed=parseXmlFeed(String(d?.contents||""));
+      if(parsed.length)return parsed;
+    }
+  }catch{}
+
+  return [];
+};
 
 // ============================================================
 // ICONS
@@ -744,7 +803,7 @@ function NewEngineModal({onClose, onAdd}) {
 // ============================================================
 // MAIN
 // ============================================================
-export default function ONYXRadar({ onBack }){
+export default function ONYXRadar({ onBack, onOpenWorld }){
   const[srcF,setSrcF]=useState(INIT_SRC);const[engines,setEngines]=useState(INIT_ENGINES);const[articles,setArticles]=useState(INIT_ARTS);const[alerts,setAlerts]=useState(INIT_ALERTS);const[notifs,setNotifs]=useState(INIT_NOTIFS);
   const[showAlerts,setShowAlerts]=useState(false);const[showNews,setShowNews]=useState(false);const[showAuto,setShowAuto]=useState(false);const[showNew,setShowNew]=useState(false);const[showAdd,setShowAdd]=useState(false);const[editEng,setEditEng]=useState(null);const[showAISetup,setShowAISetup]=useState(false);
   const[selArtId,setSelArtId]=useState(null);const[filter,setFilter]=useState({t:"all"});const[q,setQ]=useState("");const[col,setCol]=useState(false);const[selIds,setSelIds]=useState([]);
@@ -857,7 +916,8 @@ export default function ONYXRadar({ onBack }){
     const since=Date.now()-24*60*60*1000;
     return worldArticles.filter(a=>(a.ts||0)>=since);
   },[worldArticles]);
-  const worldSources=useMemo(()=>new Set(worldArticles.map(a=>a.sn)).size,[worldArticles]);
+  const worldSourceHealth=useMemo(()=>{const worldFolder=srcF.find(f=>f.id==="sf_world");const total=worldFolder?.sources?.length||0;const ok=worldFolder?.sources?.filter(s=>s.ok).length||0;return{ok,total};},[srcF]);
+  const worldSources=worldSourceHealth.ok;
   const worldByTopic=useMemo(()=>{
     const m={};
     world24h.forEach(a=>{const k=a.topic||"General";m[k]=(m[k]||0)+1;});
@@ -947,12 +1007,13 @@ export default function ONYXRadar({ onBack }){
         if(src.type!=="rss")continue; // scraping requires backend
 
         try{
-          const srcUrl=src.url.startsWith("http")?src.url:`https://${src.url}`;
-          const r=await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(srcUrl)}&count=25`);
-          const d=await r.json();
+          const rawUrl=String(src.url||"").trim();
+          if(!rawUrl){srcState.set(src.id,false);continue;}
+          const srcUrl=rawUrl.startsWith("http")?rawUrl:`https://${rawUrl}`;
+          const items=await fetchFeedItems(srcUrl);
 
-          if(d.status==="ok"&&Array.isArray(d.items)){
-            d.items.forEach((i,idx)=>{
+          if(items.length){
+            items.forEach((i,idx)=>{
               const title=cleanTxt(i.title)||"Sans titre";
               const sum=cleanTxt(i.description).slice(0,320);
               const content=cleanTxt(i.content||i.description).slice(0,1800);
@@ -1167,6 +1228,7 @@ export default function ONYXRadar({ onBack }){
         {/* HEADER */}
         <header style={{padding:"7px 14px",borderBottom:"1px solid #ffffff04",display:"flex",alignItems:"center",gap:6,background:"#09091280"}}>
           {onBack&&(<button type="button" onClick={onBack} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:4,border:"1px solid #ffffff10",background:"transparent",color:"#ffffff55",fontSize:8,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",flexShrink:0,marginRight:4}}>{IC.back}<span>Accueil</span></button>)}
+          {onOpenWorld&&(<button type="button" onClick={onOpenWorld} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:4,border:"1px solid #00f0ff2a",background:"rgba(0,240,255,0.06)",color:"#00f0ff",fontSize:8,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}><span>◉</span><span>Live Monde</span></button>)}
           {lastFetch&&<span style={{fontSize:7,color:'#ffffff12',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>MAJ {lastFetch.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>}
           <div style={{position:"relative",flex:1,maxWidth:280}}><span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)"}}>{IC.search}</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher..." style={{width:"100%",padding:"6px 7px 6px 24px",boxSizing:"border-box",background:"rgba(255,255,255,0.01)",border:"1px solid #ffffff03",borderRadius:4,color:"#fff",fontSize:10,outline:"none"}}/></div>
 
@@ -1230,7 +1292,7 @@ export default function ONYXRadar({ onBack }){
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(110px, 1fr))",gap:5,marginBottom:7}}>
                     <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #00f0ff18"}}><div style={{fontSize:7,color:"#00f0ff70",fontFamily:"'JetBrains Mono',monospace"}}>24H</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{world24h.length}</div></div>
                     <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ff4d6d22"}}><div style={{fontSize:7,color:"#ff4d6d80",fontFamily:"'JetBrains Mono',monospace"}}>HAUT RISQUE</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{worldHighSignals}</div></div>
-                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ffffff12"}}><div style={{fontSize:7,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>SOURCES</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{worldSources}</div></div>
+                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ffffff12"}}><div style={{fontSize:7,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>SOURCES</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{worldSources}/{worldSourceHealth.total}</div></div>
                     <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ffffff12"}}><div style={{fontSize:7,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>HOTSPOT</div><div style={{fontSize:11,color:"#ffffffd0",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{worldByRegion[0]?.[0]||"Global"}</div></div>
                   </div>
 
@@ -1325,6 +1387,14 @@ export default function ONYXRadar({ onBack }){
     </div>
   );
 }
+
+
+
+
+
+
+
+
 
 
 

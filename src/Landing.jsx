@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 
 const MODULES = [
   {
@@ -132,7 +132,7 @@ function ConnectionLines() {
   );
 }
 
-export default function OnyxProductPage({ onOpenRadar }) {
+export default function OnyxProductPage({ onOpenRadar, onOpenWorld }) {
   const [activeModule, setActiveModule] = useState(null);
   const [scrollY, setScrollY] = useState(0);
 
@@ -272,6 +272,21 @@ export default function OnyxProductPage({ onOpenRadar }) {
           }}>
             Voir la démo
           </button>
+          {onOpenWorld&&<button onClick={onOpenWorld} style={{
+            padding: "16px 32px",
+            borderRadius: 12,
+            border: "1px solid #00f0ff40",
+            background: "rgba(0,240,255,0.08)",
+            color: "#00f0ff",
+            fontSize: 15,
+            fontWeight: 600,
+            letterSpacing: 1,
+            cursor: "pointer",
+            fontFamily: "'Outfit', sans-serif",
+            transition: "all 0.3s",
+          }}>
+            Live Monde
+          </button>}
         </div>
 
         {/* Stats bar */}
@@ -768,3 +783,5 @@ export default function OnyxProductPage({ onOpenRadar }) {
     </div>
   );
 }
+
+
