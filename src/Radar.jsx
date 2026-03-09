@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 
 // ============================================================
 // DATA
@@ -13,35 +13,65 @@ const INIT_ENGINES = [
 ];
 
 const INIT_SRC=[
-  {id:"sf1",name:"Concurrence",color:"#ffb800",exp:true,sources:[{id:"s1",name:"TechCrunch",type:"rss",ok:true,withStatic:false},{id:"s2",name:"Reuters",type:"rss",ok:true,withStatic:false}]},
-  {id:"sf2",name:"Réglementaire",color:"#b026ff",exp:true,sources:[{id:"s3",name:"EUR-Lex",type:"scrape",ok:true,withStatic:true},{id:"s4",name:"Légifrance",type:"rss",ok:true,withStatic:true}]},
-  {id:"sf3",name:"Politique",color:"#ff003c",exp:false,sources:[{id:"s5",name:"Le Monde",type:"rss",ok:true,withStatic:false}]},
-  {id:"sf4",name:"Tech",color:"#00f0ff",exp:false,sources:[{id:"s6",name:"Hacker News",type:"rss",ok:true,withStatic:false}]},
+  {id:"sf_world",name:"World Live",color:"#00f0ff",exp:true,sources:[
+    {id:"w1",name:"Reuters World",url:"https://feeds.reuters.com/reuters/worldNews",type:"rss",ok:true,withStatic:false},
+    {id:"w2",name:"Al Jazeera",url:"https://www.aljazeera.com/xml/rss/all.xml",type:"rss",ok:true,withStatic:false},
+    {id:"w3",name:"The Guardian World",url:"https://www.theguardian.com/world/rss",type:"rss",ok:true,withStatic:false},
+    {id:"w4",name:"UN News",url:"https://news.un.org/feed/subscribe/en/news/all/rss.xml",type:"rss",ok:true,withStatic:false},
+  ]},
+  {id:"sf1",name:"Concurrence",color:"#ffb800",exp:true,sources:[
+    {id:"s1",name:"TechCrunch",url:"https://techcrunch.com/feed/",type:"rss",ok:true,withStatic:false},
+    {id:"s2",name:"Bloomberg Markets",url:"https://feeds.bloomberg.com/markets/news.rss",type:"rss",ok:true,withStatic:false},
+  ]},
+  {id:"sf2",name:"Reglementaire",color:"#b026ff",exp:true,sources:[
+    {id:"s3",name:"Legifrance JORF",url:"https://www.legifrance.gouv.fr/rss/jorf.xml",type:"rss",ok:true,withStatic:true},
+    {id:"s4",name:"EU Press Corner",url:"https://ec.europa.eu/commission/presscorner/api/rss?language=en",type:"rss",ok:true,withStatic:true},
+  ]},
+  {id:"sf3",name:"Politique",color:"#ff003c",exp:false,sources:[
+    {id:"s5",name:"Le Monde International",url:"https://www.lemonde.fr/international/rss_full.xml",type:"rss",ok:true,withStatic:false},
+  ]},
+  {id:"sf4",name:"Tech",color:"#00f0ff",exp:false,sources:[
+    {id:"s6",name:"Hacker News",url:"https://hnrss.org/frontpage",type:"rss",ok:true,withStatic:false},
+  ]},
+];
+const INIT_ARTS=[];
+const INIT_ALERTS=[];
+const INIT_NOTIFS=[];
+
+const WORLD_REGION_RULES = [
+  { label: "Moyen-Orient", keys: ["israel", "gaza", "iran", "syria", "lebanon", "yemen", "hamas", "hezbollah", "houthi", "jerusalem", "tel aviv"] },
+  { label: "Europe", keys: ["ukraine", "russia", "nato", "eu", "europe", "balkans", "black sea"] },
+  { label: "Ameriques", keys: ["united states", "usa", "canada", "mexico", "brazil", "argentina", "colombia"] },
+  { label: "Asie-Pacifique", keys: ["china", "taiwan", "korea", "japan", "philippines", "south china sea", "india", "pakistan"] },
+  { label: "Afrique", keys: ["sahel", "sudan", "ethiopia", "somalia", "niger", "mali", "congo", "africa"] },
 ];
 
-const INIT_ARTS=[
-  {id:"a1",sf:["sf2"],sn:"DREETS",sc:"#b026ff",st:"DREETS",rg:"Hauts-de-France",title:"FTJ : Appel à projets industrie et transition écologique",sum:"AAP transition énergétique Hauts-de-France. Budget 2.5M euros.",url:"#",date:"Il y a 20h",an:{},ai:null,notes:[],content:"Le FTJ lance un AAP dans les Hauts-de-France. Budget : 2.5M euros.",cluster:null},
-  {id:"a2",sf:["sf1","sf4"],sn:"TechCrunch",sc:"#ffb800",title:"L'IA générative bouleverse le SaaS B2B",sum:"78% des éditeurs B2B ont intégré l'IA. 45Mds dollars au T1 2026.",url:"#",date:"Il y a 2h",an:{},ai:null,notes:[],content:"L'IA transforme le SaaS B2B. 45Mds dollars T1 2026.",cluster:"c1"},
-  {id:"a3",sf:["sf2"],sn:"Légifrance",sc:"#b026ff",title:"Décret 2026-287 : cybersécurité opérateurs essentiels",sum:"Systèmes certifiés ANSSI. Signalement 24h. Sanctions 4% CA.",url:"#",date:"Il y a 5h",an:{},ai:null,notes:[],content:"Décret 2026-287 : certifications ANSSI, signalement 24h.",cluster:null},
-  {id:"a4",sf:["sf3"],sn:"Le Monde",sc:"#ff003c",title:"Remaniement : ministre délégué Numérique et IA",sum:"Création ministère Numérique et IA. Stratégie nationale.",url:"#",date:"Il y a 3h",an:{},ai:null,notes:[],content:"L'Élysée crée un ministère délégué Numérique et IA.",cluster:"c2"},
-  {id:"a5",sf:["sf4"],sn:"Hacker News",sc:"#00f0ff",title:"ScrapeMaster : scraping éthique open-source",sum:"Python, robots.txt, rate-limiting. 5000 stars GitHub.",url:"#",date:"Il y a 4h",an:{},ai:null,notes:[],content:"ScrapeMaster : framework Python pour le scraping éthique.",cluster:null},
-  {id:"a6",sf:["sf2","sf3"],sn:"EUR-Lex",sc:"#b026ff",title:"Directive européenne transparence algorithmique",sum:"Documentation algorithmes obligatoire. Audits annuels. 18 mois.",url:"#",date:"Il y a 6h",an:{},ai:null,notes:[],content:"La DTA impose documentation, audits, droit d'explication.",cluster:null},
-  {id:"a7",sf:["sf1"],sn:"Reuters",sc:"#ffb800",title:"Datadog rachète ObservIQ pour 3.2 milliards euros",sum:"Plus grande acquisition observabilité Europe. 400 clients.",url:"#",date:"Il y a 7h",an:{},ai:null,notes:[],content:"Datadog acquiert ObservIQ pour 3.2Mds euros.",cluster:null},
-  // Duplicates for cluster demo
-  {id:"a8",sf:["sf1"],sn:"Bloomberg",sc:"#ffb800",title:"L'IA générative : 45 milliards investis dans le SaaS",sum:"Le marché du SaaS B2B explose grâce à l'IA générative.",url:"#",date:"Il y a 2h30",an:{},ai:null,notes:[],content:"Investissements massifs dans l'IA SaaS B2B.",cluster:"c1"},
-  {id:"a9",sf:["sf3"],sn:"France Info",sc:"#ff003c",title:"Nouveau ministre du Numérique nommé après remaniement",sum:"Le gouvernement crée un poste dédié au Numérique et à l'IA.",url:"#",date:"Il y a 3h30",an:{},ai:null,notes:[],content:"Nomination du ministre délégué au Numérique.",cluster:"c2"},
+const WORLD_TOPIC_RULES = [
+  { label: "Conflit", keys: ["war", "attack", "missile", "drone", "strike", "troops", "battle", "offensive", "ceasefire", "military"] },
+  { label: "Cyber", keys: ["cyber", "hack", "malware", "ransomware", "disinformation", "influence", "propaganda"] },
+  { label: "Diplomatie", keys: ["summit", "talks", "meeting", "negotiation", "sanctions", "resolution", "security council"] },
+  { label: "Energie", keys: ["oil", "gas", "pipeline", "opec", "energy", "nuclear"] },
+  { label: "Economie", keys: ["inflation", "market", "trade", "tariff", "supply chain", "shipping"] },
+  { label: "Humanitaire", keys: ["refugee", "aid", "civilian", "casualties", "food", "health emergency", "cholera", "famine"] },
 ];
 
-const INIT_ALERTS=[
-  {id:"al1",name:"Mentions entreprise",keywords:["ObservIQ","Datadog"],condition:"any",engine:null,engineVal:null,active:true,color:"#ff003c"},
-  {id:"al2",name:"Réglementation urgente",keywords:["décret","directive","obligation"],condition:"any",engine:"en6",engineVal:"Immédiat",active:true,color:"#ef4444"},
-  {id:"al3",name:"Gros montants",keywords:[],condition:"any",engine:"en2",engineVal:"> 100M",active:false,color:"#ffb800"},
-];
+const WORLD_SIGNAL_CRITICAL = ["breaking", "attack", "missile", "drone", "troops", "casualties", "killed", "critical", "emergency", "escalation"];
+const WORLD_SIGNAL_ELEVATED = ["sanctions", "cyber", "strike", "warning", "tension", "border", "mobilization", "evacuation"];
 
-const INIT_NOTIFS=[
-  {id:"n1",alertId:"al1",articleId:"a7",time:"Il y a 7h",read:false,text:"Datadog rachète ObservIQ — correspond à \"Mentions entreprise\""},
-  {id:"n2",alertId:"al2",articleId:"a3",time:"Il y a 5h",read:false,text:"Décret cybersécurité — correspond à \"Réglementation urgente\""},
-];
+const cleanTxt = (v) => String(v || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+const hasKey = (txt, keys) => keys.some((k) => txt.includes(k));
+const pickRule = (txt, rules, fallback) => {
+  const found = rules.find((r) => hasKey(txt, r.keys));
+  return found ? found.label : fallback;
+};
+const scoreSignal = (txt) => {
+  let score = 0;
+  if (hasKey(txt, WORLD_SIGNAL_CRITICAL)) score += 2;
+  if (hasKey(txt, WORLD_SIGNAL_ELEVATED)) score += 1;
+  if (hasKey(txt, ["disinformation", "propaganda", "influence"])) score += 1;
+  return score;
+};
+const signalLevel = (score) => (score >= 3 ? "High" : score >= 2 ? "Medium" : "Low");
 
 // ============================================================
 // ICONS
@@ -335,21 +365,9 @@ Règles:
       setEditResults(enriched);
       setStep(4);
     } catch(err) {
-      // Fallback mock data
-      const mock = selTypes.map((tid,i)=>{
-        const t=TYPES.find(x=>x.id===tid);
-        const colors=["#ffb800","#b026ff","#00ff87","#ff003c","#00f0ff","#f97316"];
-        return {
-          id:`rf${i}`,name:`Veille ${t?.name||""}`,color:colors[i%6],enabled:true,
-          suggestedEngines:["Catégorie","Géographie"],
-          sources:[
-            {id:`rs${i}_0`,name:"Source recommandée 1",url:"source1.fr",type:"rss",enabled:true},
-            {id:`rs${i}_1`,name:"Source recommandée 2",url:"source2.eu",type:"scrape",enabled:true},
-            {id:`rs${i}_2`,name:"Source recommandée 3",url:"source3.gouv.fr",type:"rss",enabled:true},
-          ]
-        };
-      });
-      setResults(mock);setEditResults(mock);setStep(4);
+      setStep(2);
+      const msg = err?.message ? String(err.message).slice(0,120) : "erreur inconnue";
+      alert(`Generation IA indisponible (${msg}). Aucune source fictive n'a ete ajoutee.`);
     }
   };
 
@@ -737,11 +755,15 @@ export default function ONYXRadar({ onBack }){
   const[lastFetch,setLastFetch]=useState(null);
   const[ctxMenu,setCtxMenu]=useState(null); // {folderId,x,y}
   const[sortBy,setSortBy]=useState("date"); // "date","source","status"
+  const uiScale=1.04;
+  const srcRef=useRef(srcF);
+  const fetchingRef=useRef(false);
 
   const selArt=useMemo(()=>selArtId?articles.find(a=>a.id===selArtId):null,[selArtId,articles]);
   const unreadNotifs=notifs.filter(n=>!n.read).length;
 
   useEffect(()=>{const l=document.createElement("link");l.href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap";l.rel="stylesheet";document.head.appendChild(l);},[]);
+  useEffect(()=>{srcRef.current=srcF;},[srcF]);
 
   const tSrc=(fid)=>setSrcF(p=>p.map(f=>f.id===fid?{...f,exp:!f.exp}:f));
   const tSel=(aid)=>setSelIds(p=>p.includes(aid)?p.filter(i=>i!==aid):[...p,aid]);
@@ -793,10 +815,19 @@ export default function ONYXRadar({ onBack }){
   const buildFeed=()=>{
     let list=articles.filter(a=>{
       if(filter.t==="src"&&!a.sf.includes(filter.id))return false;
-      if(filter.t==="static"&&!a.isStatic)return false;
+      if(filter.t==="world"&&!a.isWorld)return false;
+      if(filter.t==="static"){
+        if(!a.isStatic)return false;
+        if(filter.id&&filter.id!=="all"&&a.sid!==filter.id)return false;
+      }
       if(filter.t==="an"&&(!a.an[filter.id]||!a.an[filter.id].length))return false;
       if(filter.t==="allAn"&&!Object.keys(a.an).length)return false;
-      if(q){const ql=q.toLowerCase();return a.title.toLowerCase().includes(ql)||a.sum.toLowerCase().includes(ql);}
+      if(q){
+        const ql=q.toLowerCase();
+        const zone=(a.region||"").toLowerCase();
+        const topic=(a.topic||"").toLowerCase();
+        return a.title.toLowerCase().includes(ql)||a.sum.toLowerCase().includes(ql)||zone.includes(ql)||topic.includes(ql);
+      }
       return true;
     });
     if(showDupes){
@@ -818,8 +849,35 @@ export default function ONYXRadar({ onBack }){
     const f=buildFeed();
     if(sortBy==="source") return [...f].sort((a,b)=>a.sn.localeCompare(b.sn));
     if(sortBy==="status") return [...f].sort((a,b)=>Object.keys(b.an).length-Object.keys(a.an).length);
-    return f; // default: date order (as-is)
+    return [...f].sort((a,b)=>(b.ts||0)-(a.ts||0));
   },[articles,filter,q,showDupes,sortBy,srcF]);
+
+  const worldArticles=useMemo(()=>articles.filter(a=>a.isWorld),[articles]);
+  const world24h=useMemo(()=>{
+    const since=Date.now()-24*60*60*1000;
+    return worldArticles.filter(a=>(a.ts||0)>=since);
+  },[worldArticles]);
+  const worldSources=useMemo(()=>new Set(worldArticles.map(a=>a.sn)).size,[worldArticles]);
+  const worldByTopic=useMemo(()=>{
+    const m={};
+    world24h.forEach(a=>{const k=a.topic||"General";m[k]=(m[k]||0)+1;});
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  },[world24h]);
+  const worldByRegion=useMemo(()=>{
+    const m={};
+    world24h.forEach(a=>{const k=a.region||"Global";m[k]=(m[k]||0)+1;});
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  },[world24h]);
+  const worldHighSignals=useMemo(()=>world24h.filter(a=>a.signalLevel==="High").length,[world24h]);
+  const worldTopSignals=useMemo(()=>[...worldArticles].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,8),[worldArticles]);
+  const staticSourceLabel=useMemo(()=>srcF.flatMap(f=>f.sources).find(s=>s.id===filter.id)?.name,[srcF,filter.id]);
+  const currentFilterTitle=
+    filter.t==="all"?"Tous les flux":
+    filter.t==="world"?"Live Monde":
+    filter.t==="src"?srcF.find(f=>f.id===filter.id)?.name:
+    filter.t==="static"?(filter.id==="all"?"Toutes les archives":(staticSourceLabel||"Archive")):
+    filter.t==="allAn"?"Toutes les analyses":
+    engines.find(e=>e.id===filter.id)?.name;
 
   const handleAuto=(res,mode)=>{setArticles(p=>p.map(a=>{const r=res.find(x=>x.aid===a.id);if(!r)return a;const na=mode==="overwrite"?{...r.na}:{...a.an};if(mode==="merge")Object.entries(r.na).forEach(([eid,vals])=>{na[eid]=[...new Set([...(na[eid]||[]),...vals])];});return{...a,an:na,ai:r.sum};}));setSelIds([]);};
 
@@ -876,42 +934,98 @@ export default function ONYXRadar({ onBack }){
 
   // ── FETCH REAL RSS FEEDS ──────────────────────────────────────────────────
   const fetchFeeds=async()=>{
+    if(fetchingRef.current)return;
+    fetchingRef.current=true;
     setFetchingFeeds(true);
-    const allSrc=srcF.flatMap(f=>f.sources.map(s=>({...s,folderId:f.id,folderColor:f.color})));
-    const newArts=[];
-    for(const src of allSrc){
-      if(src.type!=='rss')continue; // scraping requires backend
-      try{
-        const srcUrl=src.url.startsWith('http')?src.url:'https://'+src.url;
-        const r=await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(srcUrl)}&count=20`);
-        const d=await r.json();
-        if(d.status==='ok'&&d.items){
-          d.items.forEach(i=>{
-            const artId=`live_${src.id}_${(i.link||'').slice(-20).replace(/[^a-z0-9]/gi,'_')}`;
-            newArts.push({
-              id:artId,sf:[src.folderId],sn:src.name,sc:src.folderColor,
-              title:(i.title||'').trim(),
-              sum:(i.description||'').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().slice(0,300),
-              url:i.link||'',
-              date:i.pubDate?new Date(i.pubDate).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'Récent',
-              content:(i.content||i.description||'').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().slice(0,1500),
-              an:{},ai:null,notes:[],cluster:null
+
+    try{
+      const allSrc=srcRef.current.flatMap(f=>f.sources.map(s=>({...s,folderId:f.id,folderColor:f.color})));
+      const newArts=[];
+      const srcState=new Map();
+
+      for(const src of allSrc){
+        if(src.type!=="rss")continue; // scraping requires backend
+
+        try{
+          const srcUrl=src.url.startsWith("http")?src.url:`https://${src.url}`;
+          const r=await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(srcUrl)}&count=25`);
+          const d=await r.json();
+
+          if(d.status==="ok"&&Array.isArray(d.items)){
+            d.items.forEach((i,idx)=>{
+              const title=cleanTxt(i.title)||"Sans titre";
+              const sum=cleanTxt(i.description).slice(0,320);
+              const content=cleanTxt(i.content||i.description).slice(0,1800);
+              const url=String(i.link||"").trim();
+              const parsedTs=Date.parse(i.pubDate||"");
+              const ts=Number.isFinite(parsedTs)?parsedTs:(Date.now()-(idx*60000));
+              const infoBlob=`${title} ${sum}`.toLowerCase();
+              const isWorld=src.folderId==="sf_world";
+              const topic=isWorld?pickRule(infoBlob,WORLD_TOPIC_RULES,"General"):null;
+              const region=isWorld?pickRule(infoBlob,WORLD_REGION_RULES,"Global"):null;
+              const signalScore=isWorld?scoreSignal(infoBlob):0;
+              const signalLvl=isWorld?signalLevel(signalScore):null;
+              const key=(url||`${src.id}_${title}_${ts}`).toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(-90);
+
+              newArts.push({
+                id:`live_${src.id}_${ts}_${key}`,
+                sid:src.id,
+                sf:[src.folderId],
+                sn:src.name,
+                sc:src.folderColor,
+                title,
+                sum,
+                url,
+                date:new Date(ts).toLocaleString("fr-FR",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}),
+                ts,
+                content,
+                an:{},
+                ai:null,
+                notes:[],
+                cluster:null,
+                isStatic:!!src.withStatic,
+                isWorld,
+                topic,
+                region,
+                signalScore,
+                signalLevel:signalLvl,
+              });
             });
-          });
-          setSrcF(p=>p.map(f=>({...f,sources:f.sources.map(s=>s.id===src.id?{...s,ok:true}:s)})));
+            srcState.set(src.id,true);
+          }else{
+            srcState.set(src.id,false);
+          }
+        }catch(_err){
+          srcState.set(src.id,false);
         }
-      }catch(e){
-        setSrcF(p=>p.map(f=>({...f,sources:f.sources.map(s=>s.id===src.id?{...s,ok:false}:s)})));
       }
+
+      if(srcState.size){
+        setSrcF(prev=>prev.map(f=>({...f,sources:f.sources.map(s=>srcState.has(s.id)?{...s,ok:srcState.get(s.id)}:s)})));
+      }
+
+      setArticles(prev=>{
+        const seen=new Set(prev.map(a=>a.url||`${a.sn}|${a.title}|${a.ts||""}`).filter(Boolean));
+        const fresh=newArts.filter(a=>{
+          const k=a.url||`${a.sn}|${a.title}|${a.ts}`;
+          if(!k||seen.has(k))return false;
+          seen.add(k);
+          return true;
+        });
+        return [...fresh,...prev].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,2000);
+      });
+    }finally{
+      setLastFetch(new Date());
+      setFetchingFeeds(false);
+      fetchingRef.current=false;
     }
-    setArticles(prev=>{
-      const existingUrls=new Set(prev.map(a=>a.url).filter(Boolean));
-      const fresh=newArts.filter(a=>a.url&&!existingUrls.has(a.url));
-      return [...fresh,...prev];
-    });
-    setLastFetch(new Date());
-    setFetchingFeeds(false);
   };
+
+  useEffect(()=>{
+    fetchFeeds();
+    const timer=setInterval(()=>{fetchFeeds();},5*60*1000);
+    return()=>clearInterval(timer);
+  },[]);
 
   // ── SETTINGS PANEL ────────────────────────────────────────────────────────
   const SettingsPanel=()=>{
@@ -952,7 +1066,7 @@ export default function ONYXRadar({ onBack }){
             <div style={{marginBottom:18,padding:'10px 12px',background:'rgba(255,255,255,0.01)',borderRadius:6,border:'1px solid #ffffff06'}}>
               <div style={{fontSize:8,letterSpacing:2,color:'#ffffff25',fontFamily:"'JetBrains Mono',monospace",marginBottom:6}}>FLUX RSS</div>
               <div style={{fontSize:9,color:'#ffffff40',fontFamily:"'JetBrains Mono',monospace",lineHeight:1.8}}>
-                Powered by rss2json.com · Cliquez ↺ dans la sidebar pour actualiser<br/>
+                Powered by rss2json.com · MAJ auto toutes les 5 min + bouton ↺ manuel<br/>
                 <span style={{color:'#ffffff20'}}>Scraping HTML disponible avec le backend Node.js (voir DEPLOY.md)</span>
               </div>
             </div>
@@ -967,9 +1081,9 @@ export default function ONYXRadar({ onBack }){
   };
 
     return(
-    <div style={{display:"flex",height:"100vh",width:"100%",background:"#07070d",fontFamily:"'Outfit',sans-serif",color:"#fff",overflow:"hidden"}}>
+    <div style={{display:"flex",height:`${100/uiScale}vh`,width:`${100/uiScale}%`,transform:`scale(${uiScale})`,transformOrigin:"top left",background:"#07070d",fontFamily:"'Outfit',sans-serif",color:"#fff",overflow:"hidden"}}>
       {/* SIDEBAR */}
-      <aside style={{width:col?44:225,minWidth:col?44:225,borderRight:"1px solid #ffffff05",background:"#090912",display:"flex",flexDirection:"column",transition:"0.25s",overflow:"hidden"}}>
+      <aside style={{width:col?44:242,minWidth:col?44:242,borderRight:"1px solid #ffffff05",background:"#090912",display:"flex",flexDirection:"column",transition:"0.25s",overflow:"hidden"}}>
         <div style={{padding:col?"10px 5px":"10px 10px",borderBottom:"1px solid #ffffff04",display:"flex",alignItems:"center",justifyContent:col?"center":"space-between"}}>
           {!col&&<div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:20,height:20,borderRadius:4,background:"linear-gradient(135deg, #00f0ff, #b026ff)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:900,fontFamily:"'Orbitron',sans-serif",boxShadow:"0 0 8px rgba(0,240,255,0.2)"}}>O</div><div><div style={{fontFamily:"'Orbitron',sans-serif",fontSize:9,fontWeight:700,letterSpacing:3,background:"linear-gradient(90deg, #00f0ff, #b026ff)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>ONYX</div><div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:6,letterSpacing:2,color:"#ffffff15"}}>RADAR</div></div></div>}
           <div style={{display:'flex',alignItems:'center',gap:2}}>
@@ -982,6 +1096,8 @@ export default function ONYXRadar({ onBack }){
         </div>
         {!col&&<div style={{flex:1,overflow:"auto",padding:"6px 8px"}}>
           <button type="button" onClick={()=>setFilter({t:"all"})} style={{width:"100%",padding:"5px 6px",borderRadius:4,border:"none",background:filter.t==="all"?"rgba(255,255,255,0.03)":"transparent",color:filter.t==="all"?"#ffffff80":"#ffffff20",fontSize:10,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:5,marginBottom:4}}>{"\u25C9"} Tous <span style={{marginLeft:"auto",fontSize:7,color:"#ffffff10",fontFamily:"'JetBrains Mono',monospace"}}>{articles.length}</span></button>
+          <button type="button" onClick={()=>setFilter({t:"world"})} style={{width:"100%",padding:"5px 6px",borderRadius:4,border:"1px solid #00f0ff15",background:filter.t==="world"?"rgba(0,240,255,0.09)":"rgba(0,240,255,0.02)",color:filter.t==="world"?"#00f0ff":"#7ce9ff",fontSize:10,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:5,marginBottom:2}}><span style={{fontSize:8}}>◉</span> Live Monde <span style={{marginLeft:"auto",fontSize:7,color:"#00f0ff88",fontFamily:"'JetBrains Mono',monospace"}}>{worldArticles.length}</span></button>
+          <div style={{padding:"0 6px 5px",fontSize:7,color:"#00f0ff55",fontFamily:"'JetBrains Mono',monospace"}}>{worldTopSignals[0]?.ts?`Derniere alerte ${new Date(worldTopSignals[0].ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`:"En attente de flux live"}</div>
 
           <div style={{fontSize:7,letterSpacing:3,color:"#ffffff0d",fontFamily:"'JetBrains Mono',monospace",padding:"8px 4px 3px",display:"flex",alignItems:"center",gap:4}}><span style={{flex:1,height:1,background:"#ffffff05"}}/><span>SOURCES</span><span style={{flex:1,height:1,background:"#ffffff05"}}/></div>
           <div style={{display:"flex",gap:3,marginBottom:4}}>
@@ -1052,7 +1168,7 @@ export default function ONYXRadar({ onBack }){
         <header style={{padding:"7px 14px",borderBottom:"1px solid #ffffff04",display:"flex",alignItems:"center",gap:6,background:"#09091280"}}>
           {onBack&&(<button type="button" onClick={onBack} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",borderRadius:4,border:"1px solid #ffffff10",background:"transparent",color:"#ffffff55",fontSize:8,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",flexShrink:0,marginRight:4}}>{IC.back}<span>Accueil</span></button>)}
           {lastFetch&&<span style={{fontSize:7,color:'#ffffff12',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>MAJ {lastFetch.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>}
-          <div style={{position:"relative",flex:1,maxWidth:240}}><span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)"}}>{IC.search}</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher..." style={{width:"100%",padding:"6px 7px 6px 24px",boxSizing:"border-box",background:"rgba(255,255,255,0.01)",border:"1px solid #ffffff03",borderRadius:4,color:"#fff",fontSize:10,outline:"none"}}/></div>
+          <div style={{position:"relative",flex:1,maxWidth:280}}><span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)"}}>{IC.search}</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher..." style={{width:"100%",padding:"6px 7px 6px 24px",boxSizing:"border-box",background:"rgba(255,255,255,0.01)",border:"1px solid #ffffff03",borderRadius:4,color:"#fff",fontSize:10,outline:"none"}}/></div>
 
           {/* Dedup toggle */}
           <button type="button" onClick={()=>setShowDupes(!showDupes)} style={{padding:"4px 9px",borderRadius:4,border:`1px solid ${showDupes?"#00f0ff22":"#ffffff06"}`,background:showDupes?"rgba(0,240,255,0.04)":"transparent",color:showDupes?"#00f0ff":"#ffffff22",fontSize:8,cursor:"pointer",fontFamily:"'JetBrains Mono',monospace",display:"flex",alignItems:"center",gap:3}}>{IC.layers} Dédup.</button>
@@ -1102,7 +1218,39 @@ export default function ONYXRadar({ onBack }){
             </div>
           ):(
             <>
-              <div style={{marginBottom:8}}><h2 style={{fontSize:14,fontWeight:600,marginBottom:1}}>{filter.t==="all"?"Tous les flux":filter.t==="src"?srcF.find(f=>f.id===filter.id)?.name:filter.t==="allAn"?"Toutes les analyses":engines.find(e=>e.id===filter.id)?.name}</h2><span style={{fontSize:8,color:"#ffffff15",fontFamily:"'JetBrains Mono',monospace"}}>{feed.length} articles{showDupes?" (dédupliqué)":""}</span></div>
+              {(filter.t==="all"||filter.t==="world")&&(
+                <div style={{marginBottom:10,padding:"10px 12px",borderRadius:8,border:"1px solid #00f0ff20",background:"linear-gradient(135deg, rgba(0,240,255,0.08), rgba(176,38,255,0.05))"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                    <span style={{fontFamily:"'Orbitron',sans-serif",fontSize:10,letterSpacing:2,color:"#00f0ff"}}>LIVE MONDE</span>
+                    <span style={{fontSize:7,color:"#ffffff35",fontFamily:"'JetBrains Mono',monospace"}}>Signaux detectes sur flux RSS reels</span>
+                    <span style={{flex:1}}/>
+                    {worldTopSignals[0]?.ts&&<span style={{fontSize:7,color:"#ffffff30",fontFamily:"'JetBrains Mono',monospace"}}>MAJ {new Date(worldTopSignals[0].ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>}
+                  </div>
+
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(110px, 1fr))",gap:5,marginBottom:7}}>
+                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #00f0ff18"}}><div style={{fontSize:7,color:"#00f0ff70",fontFamily:"'JetBrains Mono',monospace"}}>24H</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{world24h.length}</div></div>
+                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ff4d6d22"}}><div style={{fontSize:7,color:"#ff4d6d80",fontFamily:"'JetBrains Mono',monospace"}}>HAUT RISQUE</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{worldHighSignals}</div></div>
+                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ffffff12"}}><div style={{fontSize:7,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>SOURCES</div><div style={{fontSize:12,color:"#ffffffd0",fontWeight:700}}>{worldSources}</div></div>
+                    <div style={{padding:"6px 7px",borderRadius:5,background:"rgba(0,0,0,0.2)",border:"1px solid #ffffff12"}}><div style={{fontSize:7,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>HOTSPOT</div><div style={{fontSize:11,color:"#ffffffd0",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{worldByRegion[0]?.[0]||"Global"}</div></div>
+                  </div>
+
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:7}}>
+                    {worldByTopic.slice(0,5).map(([name,count])=>(<span key={`topic_${name}`} style={{padding:"2px 7px",borderRadius:4,background:"rgba(255,255,255,0.08)",border:"1px solid #ffffff1a",fontSize:8,color:"#ffffffc0",fontFamily:"'JetBrains Mono',monospace"}}>{name} {count}</span>))}
+                    {worldByTopic.length===0&&<span style={{fontSize:8,color:"#ffffff45",fontFamily:"'JetBrains Mono',monospace"}}>Aucun signal mondial recu pour le moment.</span>}
+                  </div>
+
+                  {worldTopSignals.length>0&&(
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:4}}>
+                      {worldTopSignals.slice(0,4).map(a=>{
+                        const sigColor=a.signalLevel==="High"?"#ff4d6d":a.signalLevel==="Medium"?"#ffb800":"#00ff87";
+                        return(<button key={`livebox_${a.id}`} type="button" onClick={()=>setSelArtId(a.id)} style={{padding:"7px 8px",borderRadius:5,border:"1px solid #ffffff12",background:"rgba(0,0,0,0.18)",color:"#fff",cursor:"pointer",textAlign:"left"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><span style={{fontSize:7,color:sigColor,fontFamily:"'JetBrains Mono',monospace"}}>{a.signalLevel||"Low"}</span><span style={{fontSize:7,color:"#ffffff35",fontFamily:"'JetBrains Mono',monospace"}}>{a.region||"Global"}</span><span style={{marginLeft:"auto",fontSize:7,color:"#ffffff28",fontFamily:"'JetBrains Mono',monospace"}}>{a.date}</span></div><div style={{fontSize:10,color:"#ffffffcf",lineHeight:1.35,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{a.title}</div></button>);
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{marginBottom:8}}><h2 style={{fontSize:14,fontWeight:600,marginBottom:1}}>{currentFilterTitle}</h2><span style={{fontSize:8,color:"#ffffff15",fontFamily:"'JetBrains Mono',monospace"}}>{feed.length} articles{showDupes?" (dédupliqué)":""}</span></div>
               <div style={{display:"flex",flexDirection:"column",gap:2}}>
                 {feed.map(art=>{
                   const isSel=selIds.includes(art.id);const hasAn=Object.keys(art.an).length>0;
@@ -1110,6 +1258,9 @@ export default function ONYXRadar({ onBack }){
                     <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
                       <button type="button" onClick={e=>{e.stopPropagation();tSel(art.id);}} style={{width:15,height:15,borderRadius:3,flexShrink:0,border:`1.5px solid ${isSel?"#00f0ff":"#ffffff0a"}`,background:isSel?"#00f0ff15":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{isSel&&<span style={{color:"#00f0ff",fontSize:7,fontWeight:700}}>{"\u2713"}</span>}</button>
                       <span style={{fontSize:10,fontWeight:600,color:art.sc}}>{art.sn}</span>
+                      {art.isWorld&&<span style={{padding:"0 4px",borderRadius:2,background:"#00f0ff20",color:"#00f0ff",fontSize:7,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>LIVE</span>}
+                      {art.isWorld&&art.signalLevel&&<span style={{padding:"0 4px",borderRadius:2,background:art.signalLevel==="High"?"#ff4d6d20":art.signalLevel==="Medium"?"#ffb80020":"#00ff8720",color:art.signalLevel==="High"?"#ff4d6d":art.signalLevel==="Medium"?"#ffb800":"#00ff87",fontSize:7,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>{art.signalLevel}</span>}
+                      {art.isWorld&&art.region&&<span style={{padding:"0 4px",borderRadius:2,background:"#ffffff08",color:"#ffffff66",fontSize:7,fontFamily:"'JetBrains Mono',monospace"}}>{art.region}</span>}
                       {art.st&&<span style={{padding:"0 4px",borderRadius:2,background:`${art.sc}12`,color:art.sc,fontSize:7,fontWeight:600,fontFamily:"'JetBrains Mono',monospace"}}>{art.st}</span>}
                       {art.rg&&<span style={{padding:"0 4px",borderRadius:2,background:"#ffffff03",color:"#ffffff28",fontSize:7,fontFamily:"'JetBrains Mono',monospace"}}>{art.rg}</span>}
                       {art.clusterCount>1&&<ClusterBadge count={art.clusterCount}/>}
@@ -1174,3 +1325,17 @@ export default function ONYXRadar({ onBack }){
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
