@@ -132,7 +132,7 @@ function ConnectionLines() {
   );
 }
 
-export default function OnyxProductPage({ onOpenRadar, user, onLogout }) {
+export default function OnyxProductPage({ onStart, onDemo, user, onLogout }) {
   const [activeModule, setActiveModule] = useState(null);
   const [scrollY, setScrollY] = useState(0);
 
@@ -240,7 +240,7 @@ export default function OnyxProductPage({ onOpenRadar, user, onLogout }) {
         </p>
 
         <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-          <button style={{
+          <button onClick={onStart} style={{
             padding: "16px 40px",
             borderRadius: 12,
             border: "none",
@@ -257,7 +257,7 @@ export default function OnyxProductPage({ onOpenRadar, user, onLogout }) {
           }}>
             Démarrer gratuitement
           </button>
-          <button onClick={onOpenRadar} style={{
+          <button onClick={onDemo} style={{
             padding: "16px 40px",
             borderRadius: 12,
             border: "1px solid #ffffff22",
@@ -704,7 +704,7 @@ export default function OnyxProductPage({ onOpenRadar, user, onLogout }) {
           }}>
             Rejoignez les organisations qui ne manquent plus rien. Commencez avec ONYX Radar — c'est gratuit.
           </p>
-          <button onClick={onOpenRadar} style={{
+          <button onClick={onStart} style={{
             padding: "18px 48px",
             borderRadius: 12,
             border: "none",
