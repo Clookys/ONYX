@@ -24,11 +24,9 @@ export default function App() {
     setPage("landing");
   };
 
-  // Landing is always public
-  if (page === "landing") return <Landing onOpenRadar={() => { user ? setPage("radar") : setPage("auth"); }} user={user} onLogout={handleLogout} />;
-  // Auth gate before Radar
-  if (page === "auth" && !user) return <Auth onAuth={(u) => { setUser(u); setPage("radar"); }} onBack={() => setPage("landing")} />;
-  // Radar requires auth
-  if (page === "radar" || page === "auth") return <Radar onBack={() => setPage("landing")} user={user} onLogout={handleLogout} />;
-  return <Landing onOpenRadar={() => setPage(user ? "radar" : "auth")} user={user} onLogout={handleLogout} />;
+  if (page === "landing") return <Landing onStart={() => setPage(user ? "radar" : "auth")} onDemo={() => setPage("demo")} user={user} onLogout={handleLogout} />;
+  if (page === "auth") return <Auth onAuth={(u) => { setUser(u); setPage("radar"); }} onBack={() => setPage("landing")} />;
+  if (page === "demo") return <Radar onBack={() => setPage("landing")} isDemo={true} />;
+  if (page === "radar") return <Radar onBack={() => setPage("landing")} user={user} onLogout={handleLogout} />;
+  return null;
 }
